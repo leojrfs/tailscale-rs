@@ -233,10 +233,21 @@ impl Runner {
 
     #[tracing::instrument(skip_all, fields(region_id = %self.region_id))]
     async fn run(&mut self) -> Result<(), ts_derp::Error> {
+        let mut retry_delay = Duration::from_secs(1);
         loop {
             let pending = self.wait_for_activity().await;
-            let transport = self.connect(pending).await?;
-            self.run_transport(transport).await?;
+            let result = match self.connect(pending).await {
+                Ok(transport) => {
+                    retry_delay = Duration::from_secs(1);
+                    self.run_transport(transport).await
+                }
+                Err(error) => Err(error),
+            };
+            if let Err(error) = result {
+                tracing::warn!(%error, %self.region_id, ?retry_delay, "DERP connection lost; retrying");
+                tokio::time::sleep(retry_delay).await;
+                retry_delay = (retry_delay * 2).min(Duration::from_secs(30));
+            }
         }
     }
 
