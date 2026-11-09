@@ -194,13 +194,22 @@ async fn dial_by_ipusage(
     hostname: String,
     port: u16,
 ) -> io::Result<Option<TcpStream>> {
-    match ip {
-        IpUsage::Disable => Ok(None),
+    let stream = match ip {
+        IpUsage::Disable => return Ok(None),
         IpUsage::FixedAddr(ip) => {
             let ip = ip.into();
 
-            TcpStream::connect((ip, port)).await.map(Some)
+            TcpStream::connect((ip, port)).await?
         }
-        IpUsage::UseDns => TcpStream::connect((hostname, port)).await.map(Some),
-    }
+        IpUsage::UseDns => TcpStream::connect((hostname, port)).await?,
+    };
+
+    // Each DERP frame carries one WireGuard packet, usually smaller than a TCP segment. With
+    // Nagle's algorithm, a frame waits until the previous one is acked. When nothing flows back on
+    // this connection (e.g. the peer already replies over a direct path), the server's delayed
+    // ACKs then cap relayed throughput at a few MB/s. Go disables Nagle on all TCP connections,
+    // so the official client and DERP server do not have this problem.
+    stream.set_nodelay(true)?;
+
+    Ok(Some(stream))
 }
