@@ -297,3 +297,20 @@ fn routeaddr_pfx(addr: &RouteAddress, pfx_len: u8) -> Option<ipnet::IpNet> {
     let ip = routeaddr_ip(addr)?;
     ipnet::IpNet::new(ip, pfx_len).ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn initial_dumps_complete_without_busy_errors() {
+        let (conn, handle, _msgs) = rtnetlink::new_connection().unwrap();
+        let task = tokio::spawn(conn);
+        let events: Vec<_> = init_state(handle).collect().await;
+        task.abort();
+        assert!(!events.is_empty());
+        for event in events {
+            event.unwrap();
+        }
+    }
+}

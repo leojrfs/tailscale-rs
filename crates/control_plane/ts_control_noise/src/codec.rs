@@ -221,6 +221,37 @@ mod test {
     const TEST_PAYLOAD: &[u8] = b"hello";
 
     #[test]
+    fn invalid_record_lengths() {
+        for len in (0..AEAD_OVERHEAD).chain([
+            MAX_MESSAGE_SIZE - size_of::<Header>() + 1,
+            u16::MAX as usize,
+        ]) {
+            let (_, mut codec) = init_codec_pair([0; 32], 0);
+            let header = Header {
+                typ: MessageType::Record,
+                len: U16::new(len as u16),
+            };
+            let mut buf = BytesMut::from(header.as_bytes());
+            assert_eq!(
+                codec.decode(&mut buf).unwrap_err().kind(),
+                ErrorKind::InvalidData
+            );
+            assert_eq!(buf.as_ref(), header.as_bytes());
+            assert_eq!(codec.next_nonce, 0);
+        }
+    }
+
+    #[test]
+    fn maximum_record_roundtrip() {
+        let (mut tx, mut rx) = init_codec_pair([0; 32], 0);
+        let payload = vec![42; MAX_CHUNK_SIZE];
+        let mut buf = BytesMut::new();
+        tx.encode(&payload, &mut buf).unwrap();
+        assert_eq!(buf.len(), MAX_MESSAGE_SIZE);
+        assert_eq!(rx.decode(&mut buf).unwrap().unwrap().as_ref(), payload);
+    }
+
+    #[test]
     fn roundtrip() {
         let (mut encrypt_codec, mut decrypt_codec) = rand_codec_pair();
         let mut buf = BytesMut::new();

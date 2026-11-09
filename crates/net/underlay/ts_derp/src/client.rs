@@ -320,3 +320,41 @@ where
             .map(|(k, pkt)| (DynEndpoint::derp(k), [pkt]))]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn unavailable_region_returns_error() {
+        let key = NodeKeyPair::random();
+        assert!(connect([]).await.unwrap().is_none());
+        assert!(matches!(
+            DefaultClient::connect([], &key).await,
+            Err(Error::IoFailure(_))
+        ));
+
+        // Reserve a local port without listening, so the dial fails immediately.
+        let socket = tokio::net::TcpSocket::new_v4().unwrap();
+        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = socket.local_addr().unwrap().port();
+        let url = Url::parse(&format!("https://127.0.0.1:{port}")).unwrap();
+        let mut server = ServerConnInfo::default_from_url(&url).unwrap();
+        server.ipv4 = crate::IpUsage::FixedAddr(std::net::Ipv4Addr::LOCALHOST);
+        server.ipv6 = crate::IpUsage::Disable;
+        assert!(connect([&server]).await.unwrap().is_none());
+        assert!(matches!(
+            DefaultClient::connect([&server], &key).await,
+            Err(Error::IoFailure(_))
+        ));
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        server.https_port = listener.local_addr().unwrap().port();
+        let task = tokio::spawn(async move {
+            let (conn, _) = listener.accept().await.unwrap();
+            drop(conn);
+        });
+        assert!(matches!(connect([&server]).await, Err(Error::IoFailure(_))));
+        task.await.unwrap();
+    }
+}

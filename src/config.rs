@@ -262,3 +262,58 @@ async fn private_key_file(file: &tokio::fs::File) -> std::io::Result<()> {
     let _ = file;
     Ok(())
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+
+    async fn mode(path: &Path) -> u32 {
+        tokio::fs::metadata(path)
+            .await
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777
+    }
+
+    #[tokio::test]
+    async fn key_file_permissions() {
+        let dir = tempfile::tempdir().unwrap();
+        let parent = dir.path().join("private");
+        let path = parent.join("keys.json");
+        load_key_file(&path, BadFormatBehavior::Error)
+            .await
+            .unwrap();
+        let contents = tokio::fs::read(&path).await.unwrap();
+        assert_eq!(mode(&parent).await, 0o700);
+        assert_eq!(mode(&path).await, 0o600);
+
+        tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .await
+            .unwrap();
+        load_key_file(&path, BadFormatBehavior::Error)
+            .await
+            .unwrap();
+        assert_eq!(mode(&path).await, 0o600);
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), contents);
+
+        tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400))
+            .await
+            .unwrap();
+        load_key_file(&path, BadFormatBehavior::Error)
+            .await
+            .unwrap();
+        assert_eq!(mode(&path).await, 0o400);
+
+        tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .await
+            .unwrap();
+        tokio::fs::write(&path, b"invalid").await.unwrap();
+        load_key_file(&path, BadFormatBehavior::Overwrite)
+            .await
+            .unwrap();
+        assert_eq!(mode(&path).await, 0o600);
+    }
+}
