@@ -8,6 +8,7 @@ Record breaking or significant changes here. All dates are UTC.
 - Fixed (ts_control_noise): reject undersized encrypted records and oversized frames before processing their bodies.
 - Fixed (ts_runtime): reconnect DERP transports after connection and I/O failures with bounded backoff.
 - Fixed (ts_derp): return errors instead of panicking when no relay can be reached.
+- Fixed (ts_runtime): retry failed control initialization, including malformed-frame rejection.
 
 ## [0.7.1](https://github.com/tailscale/tailscale-rs/releases/tag/v0.7.1) - 2026-11-06
 

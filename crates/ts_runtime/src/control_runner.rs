@@ -1,5 +1,5 @@
 use core::net::{Ipv4Addr, Ipv6Addr};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use kameo::{
@@ -332,10 +332,10 @@ impl ControlRunner {
         f(request).await
     }
 
-    async fn update_map_request(&self) {
+    async fn update_map_request(&self) -> Result<(), ControlError> {
         let RegState::Registered(conn) = &self.state else {
             tracing::debug!("attempt to update map request while not registered");
-            return;
+            return Ok(());
         };
 
         self.with_map_request(false, async |req| {
@@ -347,7 +347,8 @@ impl ControlRunner {
             .await
         })
         .await
-        .unwrap();
+        .map(|_| ())
+        .map_err(Into::into)
     }
 }
 
@@ -408,8 +409,15 @@ impl Message<RegisterResult> for ControlRunner {
 
                 send_map_request(req, &map_url, &conn).await
             })
-            .await
-            .unwrap();
+            .await;
+        let reader = match reader {
+            Ok(reader) => reader,
+            Err(error) => {
+                tracing::warn!(%error, "initial map request failed; reconnecting");
+                ctx.stop();
+                return;
+            }
+        };
 
         let stream = map_stream(reader).map(Arc::new);
 
@@ -496,26 +504,32 @@ impl Message<StreamMessage<Arc<StateUpdate>, (), ()>> for ControlRunner {
 impl Message<direct::NewEndpoints> for ControlRunner {
     type Reply = ();
 
-    async fn handle(&mut self, msg: direct::NewEndpoints, _ctx: &mut Context<Self, Self::Reply>) {
+    async fn handle(&mut self, msg: direct::NewEndpoints, ctx: &mut Context<Self, Self::Reply>) {
         if self.endpoints == msg.0.as_ref() {
             return;
         }
 
         self.endpoints = msg.0.to_vec();
-        self.update_map_request().await;
+        if let Err(error) = self.update_map_request().await {
+            tracing::warn!(%error, "endpoint update failed; reconnecting");
+            ctx.stop();
+        }
     }
 }
 
 impl Message<DerpLatencyMeasurement> for ControlRunner {
     type Reply = ();
 
-    async fn handle(&mut self, msg: DerpLatencyMeasurement, _ctx: &mut Context<Self, Self::Reply>) {
+    async fn handle(&mut self, msg: DerpLatencyMeasurement, ctx: &mut Context<Self, Self::Reply>) {
         if self.derp_latency_measurement.as_ref() == Some(&msg) {
             return;
         }
 
         self.derp_latency_measurement = Some(msg);
-        self.update_map_request().await;
+        if let Err(error) = self.update_map_request().await {
+            tracing::warn!(%error, "DERP latency update failed; reconnecting");
+            ctx.stop();
+        }
     }
 }
 
@@ -543,9 +557,22 @@ impl kameo::Actor for DialerActor {
 impl DialerActor {
     #[message]
     async fn dial_next(&mut self, url: url::Url) -> Result<HttpConn, ts_control::Error> {
-        self.dialer
-            .full_connect_next(&url, &self.env.keys.machine_keys)
-            .await
+        let mut retry_delay = Duration::from_secs(1);
+        loop {
+            match self
+                .dialer
+                .full_connect_next(&url, &self.env.keys.machine_keys)
+                .await
+            {
+                Ok(conn) => return Ok(conn),
+                Err(error @ ts_control::Error::InvalidUrl(_)) => return Err(error),
+                Err(error) => {
+                    tracing::warn!(%error, ?retry_delay, "control connection failed; retrying")
+                }
+            }
+            tokio::time::sleep(retry_delay).await;
+            retry_delay = (retry_delay * 2).min(Duration::from_secs(30));
+        }
     }
 
     #[message]
