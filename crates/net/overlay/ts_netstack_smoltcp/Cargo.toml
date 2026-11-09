@@ -40,6 +40,9 @@ features = [
     "proto-ipv4-fragmentation",
     "medium-ip",
     "socket-tcp",
+    # Reno rather than cubic: cubic needs std (#480). Without congestion control, smoltcp sends
+    # a whole window at once.
+    "socket-tcp-reno",
     "socket-udp",
     "socket-icmp",
     "socket-raw",
@@ -69,6 +72,9 @@ features = [
     "proto-ipv4-fragmentation",
     "medium-ip",
     "socket-tcp",
+    # Reno rather than cubic: cubic needs std (#480). Without congestion control, smoltcp sends
+    # a whole window at once.
+    "socket-tcp-reno",
     "socket-udp",
     "socket-icmp",
     "socket-raw",
