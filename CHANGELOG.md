@@ -4,7 +4,7 @@ Record breaking or significant changes here. All dates are UTC.
 
 ## Unreleased - December 2026
 
-Put changes for the upcoming release here!
+- Fixed (Rust API): create private key files with owner-only permissions on Unix and repair permissions when loading existing files.
 
 ## [0.7.1](https://github.com/tailscale/tailscale-rs/releases/tag/v0.7.1) - 2026-11-06
 

@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use ts_keys::PersistState;
 
 const CONTROL_URL_VAR: &str = "TS_CONTROL_URL";
@@ -93,6 +94,8 @@ pub fn auth_key_from_env() -> Option<String> {
 ///
 /// The `bad_format` argument allows you to specify whether an existing file should be
 /// overwritten if the contents can't be parsed.
+/// On Unix, new parent directories are private and key files are restricted to their owner,
+/// including files created by older versions.
 pub async fn load_key_file(
     p: impl AsRef<Path>,
     bad_format: BadFormatBehavior,
@@ -169,14 +172,28 @@ where
 {
     let path = path.as_ref();
 
-    tokio::fs::create_dir_all(path.parent().unwrap())
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "creating parent dirs for key file");
-            crate::Error::KeyFileWrite
-        })?;
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let mut dirs = tokio::fs::DirBuilder::new();
+    dirs.recursive(true);
+    #[cfg(unix)]
+    dirs.mode(0o700);
+    dirs.create(parent).await.map_err(|e| {
+        tracing::error!(error = %e, "creating parent dirs for key file");
+        crate::Error::KeyFileWrite
+    })?;
 
-    match tokio::fs::read(path).await {
+    let contents = async {
+        let mut file = tokio::fs::File::open(path).await?;
+        private_key_file(&file).await?;
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents).await?;
+        Ok::<_, std::io::Error>(contents)
+    }
+    .await;
+    match contents {
         Ok(contents) => match serde_json::from_slice::<KeyState>(&contents) {
             Ok(state) => return Ok(state),
             Err(e) => match bad_format_behavior {
@@ -209,18 +226,39 @@ async fn try_write(
     path: impl AsRef<Path>,
     value: &impl serde::Serialize,
 ) -> Result<(), crate::Error> {
-    tokio::fs::write(
-        path,
-        serde_json::to_vec(value).map_err(|e| {
-            tracing::error!(error = %e, "serializing key state");
-            crate::Error::KeyFileWrite
-        })?,
-    )
-    .await
-    .map_err(|e| {
+    let contents = serde_json::to_vec(value).map_err(|e| {
+        tracing::error!(error = %e, "serializing key state");
+        crate::Error::KeyFileWrite
+    })?;
+    let result = async {
+        let mut options = tokio::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let mut file = options.open(path).await?;
+        private_key_file(&file).await?;
+        file.write_all(&contents).await
+    }
+    .await;
+    result.map_err(|e| {
         tracing::error!(error = %e, "saving key state");
         crate::Error::KeyFileWrite
     })?;
 
+    Ok(())
+}
+
+async fn private_key_file(file: &tokio::fs::File) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // Already private files may be mounted read-only; loading them needs no chmod.
+        if file.metadata().await?.permissions().mode() & 0o077 != 0 {
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))
+                .await?;
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = file;
     Ok(())
 }
