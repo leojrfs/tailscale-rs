@@ -152,6 +152,13 @@ impl Decoder for Codec<Rx> {
         };
         let len = header.len.get() as usize;
 
+        // Validate the untrusted header before waiting for or splitting its body.
+        if len > MAX_MESSAGE_SIZE - size_of::<Header>()
+            || (header.typ == MessageType::Record && len < AEAD_OVERHEAD)
+        {
+            return Err(ErrorKind::InvalidData.into());
+        }
+
         if rest_len < len {
             return Ok(None);
         }

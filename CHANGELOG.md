@@ -5,6 +5,7 @@ Record breaking or significant changes here. All dates are UTC.
 ## Unreleased - December 2026
 
 - Fixed (Rust API): create private key files with owner-only permissions on Unix and repair permissions when loading existing files.
+- Fixed (ts_control_noise): reject undersized encrypted records and oversized frames before processing their bodies.
 
 ## [0.7.1](https://github.com/tailscale/tailscale-rs/releases/tag/v0.7.1) - 2026-11-06
 
