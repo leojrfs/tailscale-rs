@@ -273,6 +273,24 @@ mod tests {
 
     use super::*;
 
+    #[tokio::test]
+    async fn new_keys_are_visible_to_synchronous_readers_when_loading_returns() {
+        let dir = tempfile::tempdir().unwrap();
+        for index in 0..64 {
+            let path = dir.path().join(format!("node-{index}.json"));
+            let state = load_key_file(&path, BadFormatBehavior::Error)
+                .await
+                .unwrap();
+            // A different process or engine can open this file immediately.
+            let bytes = std::fs::read(&path).unwrap();
+            let read: KeyFile = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                read.key_state.node_key.as_bytes(),
+                state.node_key.as_bytes()
+            );
+        }
+    }
+
     async fn mode(path: &Path) -> u32 {
         tokio::fs::metadata(path)
             .await
