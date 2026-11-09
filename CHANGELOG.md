@@ -9,6 +9,7 @@ Record breaking or significant changes here. All dates are UTC.
 - Fixed (ts_runtime): reconnect DERP transports after connection and I/O failures with bounded backoff.
 - Fixed (ts_derp): return errors instead of panicking when no relay can be reached.
 - Fixed (ts_runtime): retry failed control initialization, including malformed-frame rejection.
+- Fixed (ts_netmon): serialize Linux netlink dumps to avoid losing initial addresses and routes with EBUSY.
 
 ## [0.7.1](https://github.com/tailscale/tailscale-rs/releases/tag/v0.7.1) - 2026-11-06
 

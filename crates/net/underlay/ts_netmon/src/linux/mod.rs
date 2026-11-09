@@ -71,11 +71,13 @@ fn route_state(handle: Handle) -> impl Stream<Item = Result<Event, rtnetlink::Er
 }
 
 fn init_state(handle: Handle) -> impl Stream<Item = io::Result<Event>> {
-    use tokio_stream::StreamExt;
-
+    // Linux permits only one active dump per netlink socket. Merging these
+    // streams starts concurrent dumps and loses addresses/routes with EBUSY.
+    // execute() sends the request eagerly, so defer creating each later stream.
+    let addr_handle = handle.clone();
     link_state(handle.clone())
-        .merge(addr_state(handle.clone()))
-        .merge(route_state(handle))
+        .chain(futures_util::stream::once(async move { addr_state(addr_handle) }).flatten())
+        .chain(futures_util::stream::once(async move { route_state(handle) }).flatten())
         .map_err(io::Error::other)
 }
 
