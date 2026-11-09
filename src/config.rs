@@ -237,7 +237,11 @@ async fn try_write(
         options.mode(0o600);
         let mut file = options.open(path).await?;
         private_key_file(&file).await?;
-        file.write_all(&contents).await
+        file.write_all(&contents).await?;
+        // Tokio may buffer a successful write while its blocking task is still
+        // pending. Other engines/processes must see the keys before we return.
+        file.flush().await?;
+        file.sync_all().await
     }
     .await;
     result.map_err(|e| {

@@ -4,6 +4,7 @@ Record breaking or significant changes here. All dates are UTC.
 
 ## Unreleased - December 2026
 
+- Fixed (Rust API): flush and sync newly written key files before returning, so another process or engine can immediately load the saved identity.
 - Fixed (Rust API): create private key files with owner-only permissions on Unix and repair permissions when loading existing files.
 - Fixed (ts_control_noise): reject undersized encrypted records and oversized frames before processing their bodies.
 - Fixed (ts_runtime): reconnect DERP transports after connection and I/O failures with bounded backoff.
