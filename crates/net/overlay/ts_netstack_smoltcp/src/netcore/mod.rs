@@ -123,7 +123,7 @@ impl Netstack {
     }
 
     /// Process all commands available in the command queue.
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "trace")]
     pub fn process_cmds(&mut self) {
         while let Ok(cmd) = self.command_rx.try_recv() {
             self.process_one_cmd(cmd);
@@ -131,7 +131,7 @@ impl Netstack {
     }
 
     /// Synchronously block for a single command over the channel.
-    #[tracing::instrument(skip_all, fields(?timeout))]
+    #[tracing::instrument(skip_all, fields(?timeout), level = "trace")]
     pub fn wait_for_cmd_blocking(
         &mut self,
         timeout: Option<core::time::Duration>,
@@ -146,7 +146,7 @@ impl Netstack {
     }
 
     /// Asynchronously wait for a single command over the channel.
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "trace")]
     pub fn wait_for_cmd(&self) -> impl Future<Output = Option<Request>> + use<> {
         let rx = self.command_rx.clone();
 
@@ -188,7 +188,7 @@ impl Netstack {
     }
 
     /// Process a single command.
-    #[tracing::instrument(skip_all, fields(?command, ?handle))]
+    #[tracing::instrument(skip_all, fields(?command, ?handle), level = "trace")]
     pub fn process_one_cmd(
         &mut self,
         Request {
@@ -237,7 +237,7 @@ impl Netstack {
     /// blocked socket commands.
     ///
     /// Returns whether there were any updates to socket state.
-    #[tracing::instrument(skip_all, fields(%now))]
+    #[tracing::instrument(skip_all, fields(%now), level = "trace")]
     pub fn poll_device_io(
         &mut self,
         now: smoltcp::time::Instant,

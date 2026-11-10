@@ -183,7 +183,7 @@ impl ReceiveSession {
     }
 
     /// Decrypt a wireguard transport data message in place.
-    #[tracing::instrument(skip_all, fields(session_id = ?self.session_handle))]
+    #[tracing::instrument(skip_all, fields(session_id = ?self.session_handle), level = "trace")]
     #[must_use]
     fn decrypt_one(&mut self, pkt: &mut PacketMut) -> bool {
         let Ok((header, _)) = TransportDataHeader::try_ref_from_prefix(pkt.as_ref()) else {

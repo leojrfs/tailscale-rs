@@ -4,6 +4,8 @@ Record breaking or significant changes here. All dates are UTC.
 
 ## Unreleased - December 2026
 
+- Changed (ts_dataplane, ts_tunnel, ts_netstack_smoltcp): move per-packet and socket-poll instrumentation to TRACE, avoiding INFO-level span creation and formatting during normal forwarding.
+
 - Fixed (Rust API): flush and sync newly written key files before returning, so another process or engine can immediately load the saved identity.
 - Fixed (Rust API): create private key files with owner-only permissions on Unix and repair permissions when loading existing files.
 - Fixed (ts_control_noise): reject undersized encrypted records and oversized frames before processing their bodies.

@@ -111,7 +111,7 @@ impl DataPlane {
     }
 
     /// Processes packets originating from the local device.
-    #[tracing::instrument(skip_all, fields(n_packets = packets.len()))]
+    #[tracing::instrument(skip_all, fields(n_packets = packets.len()), level = "trace")]
     pub fn process_outbound(&mut self, packets: Vec<PacketMut>) -> OutboundResult {
         let overlay_router::outbound::Result {
             to_wireguard,

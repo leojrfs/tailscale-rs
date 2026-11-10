@@ -217,7 +217,7 @@ impl DataPlane {
     }
 
     /// Run the data plane for a single step.
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "trace")]
     pub async fn step(&self) {
         enum SelectResult {
             OverlayDown(FromOverlay),

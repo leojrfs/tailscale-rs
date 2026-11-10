@@ -114,7 +114,7 @@ impl Netstack {
     }
 
     /// Drop all TCP sockets that have finished closing.
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "trace")]
     pub(crate) fn drain_tcp_closes(&mut self) {
         self.pending_tcp_closes.retain(|&handle| {
             let state = {

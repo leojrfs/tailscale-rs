@@ -240,7 +240,7 @@ impl Netstack {
     }
 
     /// Attempt to accept a TCP connection for all TCP listeners.
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "trace")]
     pub(crate) fn pump_tcp_accept(&mut self) {
         for listener in self.tcp_listeners.values_mut() {
             let sock = self

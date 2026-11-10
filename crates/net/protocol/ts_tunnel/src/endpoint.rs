@@ -80,7 +80,7 @@ impl Peer {
         self.maybe_start_handshake(endpoint, now, out);
     }
 
-    #[tracing::instrument(skip_all, fields(?session_id, n_packets = packets.len()))]
+    #[tracing::instrument(skip_all, fields(?session_id, n_packets = packets.len()), level = "trace")]
     fn recv(
         &mut self,
         endpoint: &mut EndpointState,
@@ -205,7 +205,7 @@ impl Peer {
         }
     }
 
-    #[tracing::instrument(skip_all, fields(now, peer_id = ?self.config.id))]
+    #[tracing::instrument(skip_all, fields(now, peer_id = ?self.config.id), level = "trace")]
     fn handshake_timeout(
         &mut self,
         endpoint: &mut EndpointState,
@@ -261,7 +261,7 @@ impl Peer {
         self.keepalive = None;
     }
 
-    #[tracing::instrument(skip_all, fields(now, peer_id = ?self.config.id))]
+    #[tracing::instrument(skip_all, fields(now, peer_id = ?self.config.id), level = "trace")]
     fn maybe_start_handshake(
         &mut self,
         endpoint: &mut EndpointState,
