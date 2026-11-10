@@ -444,3 +444,52 @@ fn configure_udp_receive_buffer(sock: &UdpSocket) {
         tracing::debug!(%error, "could not enlarge direct UDP receive buffer");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tokio::net::UdpSocket;
+
+    use super::configure_udp_receive_buffer;
+
+    #[tokio::test]
+    async fn receive_buffer_tuning_preserves_datagrams() {
+        let receiver = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        configure_udp_receive_buffer(&receiver);
+        let sender = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let data = [0x5a; 4096];
+        sender
+            .send_to(&data, receiver.local_addr().unwrap())
+            .await
+            .unwrap();
+        let mut buf = [0; 8192];
+        let (n, from) = receiver.recv_from(&mut buf).await.unwrap();
+        assert_eq!(&buf[..n], &data);
+        assert_eq!(from, sender.local_addr().unwrap());
+    }
+
+    #[tokio::test]
+    async fn receive_buffer_tuning_preserves_larger_limits() {
+        let receiver = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let sock = socket2::SockRef::from(&receiver);
+        sock.set_recv_buffer_size(512 * 1024).unwrap();
+        let before = sock.recv_buffer_size().unwrap();
+        configure_udp_receive_buffer(&receiver);
+        assert_eq!(sock.recv_buffer_size().unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn receive_buffer_tuning_supports_optional_ipv6() {
+        let Ok(receiver) = UdpSocket::bind("[::1]:0").await else {
+            return;
+        };
+        configure_udp_receive_buffer(&receiver);
+        let sender = UdpSocket::bind("[::1]:0").await.unwrap();
+        sender
+            .send_to(b"ipv6", receiver.local_addr().unwrap())
+            .await
+            .unwrap();
+        let mut buf = [0; 16];
+        let (n, _) = receiver.recv_from(&mut buf).await.unwrap();
+        assert_eq!(&buf[..n], b"ipv6");
+    }
+}
