@@ -347,3 +347,33 @@ impl smoltcp::phy::Device for WakingPipeDev {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::{sync::mpsc, thread, time::Duration};
+
+    use super::WakingPipe;
+
+    #[test]
+    fn try_recv_returns_with_an_open_empty_pipe() {
+        let (mut receiver, sender) = WakingPipe::unbounded();
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            done_tx.send(receiver.rx.try_recv()).unwrap();
+        });
+        // Only a deadlock guard: there is no packet or timer to wait for.
+        let result = done_rx.recv_timeout(Duration::from_secs(5));
+        // Close before joining so even a broken blocking receive can exit.
+        drop(sender);
+        worker.join().unwrap();
+        assert_eq!(result.unwrap(), None);
+    }
+
+    #[test]
+    fn try_recv_drains_a_closed_pipe() {
+        let (mut receiver, sender) = WakingPipe::unbounded();
+        sender.tx.send(b"packet");
+        drop(sender);
+        assert_eq!(receiver.rx.try_recv().unwrap().as_ref(), b"packet");
+        assert_eq!(receiver.rx.try_recv(), None);
+    }
+}

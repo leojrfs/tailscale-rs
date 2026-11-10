@@ -154,3 +154,46 @@ fn packet_from_bytes(buf: bytes::Bytes) -> PacketMut {
         .into()
 }
 
+#[cfg(test)]
+mod tests {
+    use bytes::{Bytes, BytesMut};
+
+    use super::{OUTBOUND_BATCH_SIZE, outgoing_batch, packet_from_bytes};
+
+    #[test]
+    fn output_batches_preserve_order_and_drain_after_close() {
+        let (mut receiver, sender) = netstack::WakingPipe::unbounded();
+        let count = OUTBOUND_BATCH_SIZE * 2 + 1;
+        for n in 0..count {
+            sender.tx.send(&[n as u8]);
+        }
+        drop(sender);
+        let mut seen = Vec::new();
+        let mut lengths = Vec::new();
+        while let Some(first) = receiver.rx.try_recv() {
+            let packets = outgoing_batch(first, &mut receiver.rx);
+            lengths.push(packets.len());
+            seen.extend(packets.iter().map(|p| p[0]));
+        }
+        assert_eq!(lengths, [OUTBOUND_BATCH_SIZE, OUTBOUND_BATCH_SIZE, 1]);
+        assert_eq!(seen, (0..count as u8).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn unique_output_buffer_reuses_its_allocation() {
+        let buf = BytesMut::from(&b"packet"[..]).freeze();
+        let ptr = buf.as_ptr();
+        let packet = packet_from_bytes(buf);
+        assert_eq!(packet.as_ref(), b"packet");
+        assert_eq!(packet.as_ptr(), ptr);
+    }
+
+    #[test]
+    fn shared_output_buffer_is_copied_before_mutation() {
+        let original = Bytes::from(Vec::from(&b"packet"[..]));
+        let mut packet = packet_from_bytes(original.clone());
+        packet[0] = b'P';
+        assert_eq!(original.as_ref(), b"packet");
+        assert_eq!(packet.as_ref(), b"Packet");
+    }
+}
