@@ -113,6 +113,7 @@ impl kameo::Actor for DirectActor {
             .await?;
 
         let sock4 = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        configure_udp_receive_buffer(&sock4);
         let sock4 = Arc::new(sock4);
         tracing::debug!(transport_id = ?id, local_addr = %sock4.local_addr().unwrap(), "direct udp4 socket bound");
 
@@ -120,6 +121,7 @@ impl kameo::Actor for DirectActor {
 
         let sock6 = UdpSocket::bind("[::]:0").await.ok().map(Arc::new);
         if let Some(sock6) = sock6.as_ref() {
+            configure_udp_receive_buffer(sock6);
             tracing::debug!(transport_id = ?id, local_addr = %sock6.local_addr().unwrap(), "direct udp6 socket bound");
             slf.attach_stream(udp_rx(sock6.clone()).boxed(), (), ());
         } else {
@@ -420,5 +422,25 @@ impl Message<StreamMessage<UdpRx, (), ()>> for DirectActor {
                 panic!()
             }
         }
+    }
+}
+
+// Leave room for a short burst while the single dataplane worker decrypts and
+// forwards its previous batch. Kernels may clamp this request; no privileges or
+// system-wide settings are required. Preserve larger preconfigured limits.
+const DIRECT_RECEIVE_BUFFER: usize = 256 * 1024;
+
+fn configure_udp_receive_buffer(sock: &UdpSocket) {
+    let sock = socket2::SockRef::from(sock);
+    match sock.recv_buffer_size() {
+        Ok(current) if current >= DIRECT_RECEIVE_BUFFER => return,
+        Ok(_) => {}
+        Err(error) => {
+            tracing::debug!(%error, "could not read direct UDP receive buffer size");
+            return;
+        }
+    }
+    if let Err(error) = sock.set_recv_buffer_size(DIRECT_RECEIVE_BUFFER) {
+        tracing::debug!(%error, "could not enlarge direct UDP receive buffer");
     }
 }

@@ -4,6 +4,8 @@ Record breaking or significant changes here. All dates are UTC.
 
 ## Unreleased - December 2026
 
+- Changed (ts_runtime): request modest UDP receive-buffer headroom for direct traffic, keeping larger existing limits and tolerating kernel caps or unsupported socket options without changing system-wide settings.
+
 - Fixed (ts_netstack_smoltcp): make `WakingPipeReceiver::try_recv` return immediately when an open pipe is empty.
 - Changed (ts_runtime): hand queued netstack packets to the dataplane in batches of at most 32 and reuse uniquely owned buffers instead of copying each packet twice.
 
