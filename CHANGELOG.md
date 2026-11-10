@@ -4,6 +4,9 @@ Record breaking or significant changes here. All dates are UTC.
 
 ## Unreleased - December 2026
 
+- Fixed (ts_netstack_smoltcp): make `WakingPipeReceiver::try_recv` return immediately when an open pipe is empty.
+- Changed (ts_runtime): hand queued netstack packets to the dataplane in batches of at most 32 and reuse uniquely owned buffers instead of copying each packet twice.
+
 - Changed (ts_dataplane, ts_tunnel, ts_netstack_smoltcp): move per-packet and socket-poll instrumentation to TRACE, avoiding INFO-level span creation and formatting during normal forwarding.
 
 - Fixed (Rust API): flush and sync newly written key files before returning, so another process or engine can immediately load the saved identity.

@@ -159,7 +159,7 @@ impl WakingPipeReceiver {
             return Some(buf);
         }
 
-        let ret = self.rx.recv().ok();
+        let ret = self.rx.try_recv().ok();
         self.remote_waker.wake();
 
         ret
@@ -346,3 +346,4 @@ impl smoltcp::phy::Device for WakingPipeDev {
         caps
     }
 }
+

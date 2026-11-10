@@ -51,7 +51,8 @@ impl kameo::Actor for NetstackActor {
 
         Task::spawn_link(&slf, async move {
             while let Some(buf) = netstack_down_rx.recv_async().await {
-                if netstack_up.send((id, vec![buf.to_vec().into()])).is_err() {
+                let packets = outgoing_batch(buf, &mut netstack_down_rx);
+                if netstack_up.send((id, packets)).is_err() {
                     break;
                 }
             }
@@ -125,3 +126,31 @@ impl Message<Arc<ts_control::StateUpdate>> for NetstackActor {
         }
     }
 }
+
+// Bound each handoff so the dataplane can service incoming packets and other work
+// between batches. Drain only packets already available; never wait to fill a batch.
+const OUTBOUND_BATCH_SIZE: usize = 32;
+
+fn outgoing_batch(
+    first: bytes::Bytes,
+    receiver: &mut netstack::WakingPipeReceiver,
+) -> Vec<PacketMut> {
+    let mut packets = Vec::with_capacity(OUTBOUND_BATCH_SIZE);
+    packets.push(packet_from_bytes(first));
+    while packets.len() < OUTBOUND_BATCH_SIZE {
+        let Some(buf) = receiver.try_recv() else {
+            break;
+        };
+        packets.push(packet_from_bytes(buf));
+    }
+    packets
+}
+
+fn packet_from_bytes(buf: bytes::Bytes) -> PacketMut {
+    // The pipe usually transfers the sole reference to a frozen BytesMut. Reuse
+    // that allocation; copy only when somebody else still holds the buffer.
+    buf.try_into_mut()
+        .unwrap_or_else(|buf| bytes::BytesMut::from(buf.as_ref()))
+        .into()
+}
+
